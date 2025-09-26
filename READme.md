@@ -1,4 +1,4 @@
-🗳️ Vote App - Phase 1: Containerisation
+# 🗳️ Vote App - Phase 1: Containerisation
 📋 Description
 
 Application de vote en temps réel containerisée avec architecture microservices.
