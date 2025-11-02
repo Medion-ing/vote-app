@@ -1,0 +1,213 @@
+---
+- name: Déployer et configurer l'application de vote sur MicroK8s
+  hosts: k8s_master
+  become: yes
+  vars:
+    frontend_image: "ciscko/vote-frontend:fixed2"
+    backend_image: "ciscko/vote-backend:latest"
+    master_ip: "192.168.1.32"
+  tasks:
+
+    # === Étape 1 : Créer le namespace ===
+    - name: Créer le namespace vote-app
+      shell: |
+        microk8s kubectl create namespace vote-app --dry-run=client -o yaml | microk8s kubectl apply -f -
+      environment:
+        PATH: "/snap/bin:{{ ansible_env.PATH }}"
+
+    # === Étape 2 : Déployer Redis ===
+    - name: Déployer Redis
+      shell: |
+        microk8s kubectl apply -f - <<EOF
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: redis
+          namespace: vote-app
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: redis
+          template:
+            metadata:
+              labels:
+                app: redis
+            spec:
+              containers:
+              - name: redis
+                image: redis:7-alpine
+                ports:
+                - containerPort: 6379
+        ---
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: redis
+          namespace: vote-app
+        spec:
+          ports:
+          - port: 6379
+            targetPort: 6379
+          selector:
+            app: redis
+        EOF
+      environment:
+        PATH: "/snap/bin:{{ ansible_env.PATH }}"
+
+    # === Étape 3 : Déployer le backend avec ressources CPU pour HPA ===
+    - name: Déployer le backend
+      shell: |
+        microk8s kubectl apply -f - <<EOF
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: vote-backend
+          namespace: vote-app
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: vote-backend
+          template:
+            metadata:
+              labels:
+                app: vote-backend
+            spec:
+              containers:
+              - name: backend
+                image: {{ backend_image }}
+                ports:
+                - containerPort: 8000
+                env:
+                - name: REDIS_URL
+                  value: "redis://redis:6379"
+                resources:
+                  requests:
+                    cpu: 100m
+                  limits:
+                    cpu: 500m
+        ---
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: vote-backend
+          namespace: vote-app
+        spec:
+          ports:
+          - port: 8000
+            targetPort: 8000
+          selector:
+            app: vote-backend
+        EOF
+      environment:
+        PATH: "/snap/bin:{{ ansible_env.PATH }}"
+
+    # === Étape 4 : Déployer le frontend ===
+    - name: Déployer le frontend
+      shell: |
+        microk8s kubectl apply -f - <<EOF
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: vote-frontend
+          namespace: vote-app
+        spec:
+          replicas: 2
+          selector:
+            matchLabels:
+              app: vote-frontend
+          template:
+            metadata:
+              labels:
+                app: vote-frontend
+            spec:
+              containers:
+              - name: frontend
+                image: {{ frontend_image }}
+                ports:
+                - containerPort: 3000
+                env:
+                - name: API_URL
+                  value: "http://vote-backend:8000"
+        ---
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: vote-frontend
+          namespace: vote-app
+        spec:
+          type: NodePort
+          ports:
+          - port: 3000
+            targetPort: 3000
+            nodePort: 30001
+          selector:
+            app: vote-frontend
+        EOF
+      environment:
+        PATH: "/snap/bin:{{ ansible_env.PATH }}"
+
+    # === Étape 5 : Exposer le backend en externe ===
+    - name: Exposer le backend avec NodePort
+      shell: |
+        microk8s kubectl apply -f - <<EOF
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: vote-backend-external
+          namespace: vote-app
+        spec:
+          type: NodePort
+          ports:
+          - port: 8000
+            targetPort: 8000
+            nodePort: 30002
+          selector:
+            app: vote-backend
+        EOF
+      environment:
+        PATH: "/snap/bin:{{ ansible_env.PATH }}"
+
+    # === Étape 6 : Mettre à jour le frontend pour pointer vers l’URL externe ===
+    - name: Configurer le frontend pour utiliser le backend externe
+      shell: |
+        microk8s kubectl set env deployment/vote-frontend -n vote-app VITE_API_URL=http://{{ master_ip }}:30002
+      environment:
+        PATH: "/snap/bin:{{ ansible_env.PATH }}"
+
+    - name: Redémarrer le frontend
+      shell: microk8s kubectl rollout restart deployment/vote-frontend -n vote-app
+      environment:
+        PATH: "/snap/bin:{{ ansible_env.PATH }}"
+
+    # === Étape 7 : Attendre que tout soit prêt ===
+    - name: Attendre que les pods soient prêts
+      shell: |
+        microk8s kubectl wait --for=condition=ready pod -l app=vote-frontend -n vote-app --timeout=300s
+        microk8s kubectl wait --for=condition=ready pod -l app=vote-backend -n vote-app --timeout=300s
+        microk8s kubectl wait --for=condition=ready pod -l app=redis -n vote-app --timeout=300s
+      environment:
+        PATH: "/snap/bin:{{ ansible_env.PATH }}"
+      async: 320
+      poll: 10
+
+    # === Étape 8 : Vérification finale ===
+    - name: Vérifier les services
+      shell: microk8s kubectl get svc -n vote-app
+      environment:
+        PATH: "/snap/bin:{{ ansible_env.PATH }}"
+      register: services
+
+    - name: Afficher les services
+      debug:
+        msg: "{{ services.stdout }}"
+
+    - name: Résumé final
+      debug:
+        msg: |
+          🎉 Déploiement réussi !
+          
+          🔹 Frontend : http://{{ master_ip }}:30001
+          🔹 Backend (externe) : http://{{ master_ip }}:30002
+          🔹 Namespace : vote-app

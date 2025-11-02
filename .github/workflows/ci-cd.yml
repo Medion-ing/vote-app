@@ -1,0 +1,168 @@
+name: CI/CD Pipeline Complète
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Permet de lancer manuellement
+
+jobs:
+  # JOB 1 : DÉPLOIEMENT TERRAFORM
+  terraform-deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3  # Correction de la version
+      
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2  # Correction de la version
+      
+    - name: Configure Proxmox
+      run: |
+        cd infra/terraform
+        terraform init
+        terraform apply -auto-approve
+
+  # JOB 2 : TESTS BACKEND
+  test-backend:
+    runs-on: ubuntu-latest
+    needs: terraform-deploy
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3  # Correction de la version
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        cd backend
+        pip install -r requirements.txt
+        pip install flake8 black
+        
+    - name: Lint Python code
+      run: |
+        cd backend
+        flake8 . --count --max-complexity=10 --statistics
+        
+    - name: Check code formatting
+      run: |
+        cd backend
+        black --check .
+
+  # JOB 3 : TESTS FRONTEND  
+  test-frontend:
+    runs-on: ubuntu-latest
+    needs: terraform-deploy
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3  # Correction de la version
+      
+    - name: Set up Node.js
+      uses: actions/setup-node@v3  # Correction de la version
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Install dependencies
+      run: |
+        cd frontend
+        npm install
+        
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm run build
+
+  # JOB 4 : BUILD DES IMAGES DOCKER
+  build-and-push:
+    needs: [test-backend, test-frontend]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3  # Correction de la version
+      
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v2  # Correction de la version
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+        
+    - name: Build and push backend image
+      uses: docker/build-push-action@v4  # Correction de la version
+      with:
+        context: ./backend
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/vote-backend:latest
+        
+    - name: Build and push frontend image
+      uses: docker/build-push-action@v4  # Correction de la version
+      with:
+        context: ./frontend
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/vote-frontend:latest
+
+  # JOB 5 : DÉPLOIEMENT ANSIBLE (TOUS LES PLAYBOOKS)
+  ansible-deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3  # Correction de la version
+      
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.8.0
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+        
+    - name: Install Ansible
+      run: sudo apt-get update && sudo apt-get install -y ansible
+      
+    - name: Attendre que les VMs soient prêtes
+      run: sleep 120
+      
+    - name: "1. Installation Docker"
+      run: |
+        cd infra/ansible
+        ansible-playbook -i inventory/hosts.ini playbooks/01-docker.yml
+        
+    - name: "2. Nettoyage Kubeadm"
+      run: |
+        cd infra/ansible
+        ansible-playbook -i inventory/hosts.ini playbooks/02-cleanup-kubeadm.yml
+        
+    - name: "3. Setup MicroK8s"
+      run: |
+        cd infra/ansible
+        ansible-playbook -i inventory/hosts.ini playbooks/03-microk8s-setup-fixed.yml
+        
+    - name: "4. Déploiement Application"
+      run: |
+        cd infra/ansible
+        ansible-playbook -i inventory/hosts.ini playbooks/04-deploy-vote-app-complete.yml \
+          -e "frontend_image=${{ secrets.DOCKERHUB_USERNAME }}/vote-frontend:latest" \
+          -e "backend_image=${{ secrets.DOCKERHUB_USERNAME }}/vote-backend:latest" \
+          -e "master_ip=192.168.1.32"
+          
+    - name: "5. Setup HPA"
+      run: |
+        cd infra/ansible
+        ansible-playbook -i inventory/hosts.ini playbooks/05-hpa-backend.yml
+        
+    - name: "6. Supervision"
+      run: |
+        cd infra/ansible
+        ansible-playbook -i inventory/hosts.ini playbooks/07-supervision.yml
+        
+    - name: Vérification finale
+      run: |
+        cd infra/ansible
+        ansible k8s_master -i inventory/hosts.ini -m shell -a "microk8s kubectl get pods -n vote-app"
