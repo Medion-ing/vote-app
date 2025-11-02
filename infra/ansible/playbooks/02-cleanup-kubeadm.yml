@@ -1,0 +1,39 @@
+---
+- name: Nettoyer l'installation kubeadm existante
+  hosts: k8s_cluster
+  become: yes
+  tasks:
+    - name: Arrêter kubelet
+      systemd:
+        name: kubelet
+        state: stopped
+        
+    - name: Réinitialiser kubeadm
+      command: kubeadm reset -f
+      ignore_errors: yes
+      
+    - name: Supprimer les fichiers Kubernetes
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - /etc/kubernetes
+        - /var/lib/kubelet
+        - /var/lib/etcd
+        - /etc/cni/net.d
+        - /var/lib/dockershim
+        - /var/lib/cni
+        - /home/ciscko/.kube
+        
+    - name: Nettoyer iptables
+      shell: |
+        iptables -F || true
+        iptables -t nat -F || true
+        iptables -t mangle -F || true
+        iptables -X || true
+        
+    - name: Désinstaller les paquets Kubernetes
+      shell: |
+        apt-mark unhold kubelet kubeadm kubectl
+        apt-get remove -y kubelet kubeadm kubectl --allow-change-held-packages
+        apt autoremove -y

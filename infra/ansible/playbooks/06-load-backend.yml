@@ -1,0 +1,31 @@
+---
+- name: Simuler la charge sur le backend
+  hosts: k8s_master
+  become: yes
+  vars:
+    backend_url: "http://192.168.1.32:30002/vote"  # ton backend exposé via NodePort
+    load_script_path: "/home/ciscko/load_backend.sh"
+    load_duration: 300  # durée de simulation en secondes
+
+  tasks:
+    - name: Créer le script de charge
+      copy:
+        dest: "{{ load_script_path }}"
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          END=$((SECONDS+{{ load_duration }}))
+          while [ $SECONDS -lt $END ]; do
+            curl -s -o /dev/null {{ backend_url }}
+          done
+          echo "Charge terminée"
+
+    - name: Exécuter le script de charge en arrière-plan
+      async: "{{ load_duration + 10 }}"
+      poll: 0
+      shell: "bash {{ load_script_path }}"
+      register: load_job
+
+    - name: Afficher l'ID du job en arrière-plan
+      debug:
+        msg: "Le script de charge s'exécute en arrière-plan avec Job ID {{ load_job.ansible_job_id }}"

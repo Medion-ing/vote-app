@@ -1,0 +1,84 @@
+---
+- name: Préparer le système pour MicroK8s
+  hosts: k8s_cluster
+  become: yes
+  tasks:
+    - name: Arrêter Docker pour éviter les conflits
+      systemd:
+        name: docker
+        state: stopped
+        enabled: no
+        
+    - name: Charger le module kernel br_netfilter
+      modprobe:
+        name: br_netfilter
+        state: present
+        
+    - name: Configurer sysctl pour Kubernetes
+      sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      with_items:
+        - { key: net.bridge.bridge-nf-call-iptables, value: '1' }
+        - { key: net.bridge.bridge-nf-call-ip6tables, value: '1' }
+        - { key: net.ipv4.ip_forward, value: '1' }
+
+- name: Installer MicroK8s sur tous les nœuds
+  hosts: k8s_cluster
+  become: yes
+  tasks:
+    - name: Installer MicroK8s
+      snap:
+        name: microk8s
+        classic: yes
+        state: present
+        
+    - name: Ajouter l'utilisateur au groupe microk8s
+      user:
+        name: ciscko
+        groups: microk8s
+        append: yes
+        
+    - name: Configurer les permissions kubeconfig
+      file:
+        path: /home/ciscko/.kube
+        state: directory
+        owner: ciscko
+        group: microk8s
+        mode: 0755
+        
+- name: Démarrer et configurer MicroK8s sur le master
+  hosts: k8s_master
+  become: yes
+  tasks:
+    - name: Redémarrer MicroK8s pour s'assurer qu'il démarre
+      shell: sudo snap restart microk8s
+      
+    - name: Attendre que MicroK8s soit prêt
+      shell: microk8s status --wait-ready
+      environment:
+        PATH: "/snap/bin:{{ ansible_env.PATH }}"
+      async: 600
+      poll: 10
+      
+    - name: Activer les addons essentiels
+      shell: "microk8s enable {{ item }}"
+      environment:
+        PATH: "/snap/bin:{{ ansible_env.PATH }}"
+      with_items:
+        - dns
+        - dashboard
+      ignore_errors: yes
+
+    - name: Générer le token de jointure
+      shell: microk8s add-node --token-ttl 3600
+      register: join_command
+      environment:
+        PATH: "/snap/bin:{{ ansible_env.PATH }}"
+        
+    - name: Extraire la commande join
+      set_fact:
+        microk8s_join_command: "{{ join_command.stdout_lines | select('match', 'microk8s join') | list | first }}"
+      run_once: true

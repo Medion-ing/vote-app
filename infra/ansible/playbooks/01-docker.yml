@@ -1,0 +1,44 @@
+---
+- name: Installation de Docker sur les nœuds Kubernetes
+  hosts: k8s_cluster
+  become: yes
+
+  tasks:
+    - name: Mettre à jour le système
+      apt:
+        update_cache: yes
+        upgrade: yes
+
+    - name: Installer les dépendances nécessaires
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+        state: present
+
+    - name: Ajouter la clé GPG officielle de Docker
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Ajouter le dépôt Docker
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu jammy stable
+        state: present
+
+    - name: Installer Docker Engine
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+        update_cache: yes
+
+    - name: Activer et démarrer le service Docker
+      systemd:
+        name: docker
+        enabled: yes
+        state: started

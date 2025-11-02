@@ -1,0 +1,40 @@
+# === Étape 9 : Créer un HPA pour le backend ===
+- name: Créer l'HPA sur le backend
+  hosts: k8s_master
+  become: yes
+  tasks:
+    - name: Déployer HPA pour vote-backend
+      shell: |
+        microk8s kubectl apply -f - <<EOF
+        apiVersion: autoscaling/v2
+        kind: HorizontalPodAutoscaler
+        metadata:
+          name: vote-backend-hpa
+          namespace: vote-app
+        spec:
+          scaleTargetRef:
+            apiVersion: apps/v1
+            kind: Deployment
+            name: vote-backend
+          minReplicas: 2
+          maxReplicas: 5
+          metrics:
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 50
+        EOF
+      environment:
+        PATH: "/snap/bin:{{ ansible_env.PATH }}"
+
+    - name: Vérifier l'état du HPA
+      shell: microk8s kubectl get hpa -n vote-app
+      environment:
+        PATH: "/snap/bin:{{ ansible_env.PATH }}"
+      register: hpa_status
+
+    - name: Afficher le HPA
+      debug:
+        msg: "{{ hpa_status.stdout }}"

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import './App.css'
 
-const API_URL = 'http://192.168.1.177:8000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://vote-backend:8000';
 
 function App() {
   const [formData, setFormData] = useState({

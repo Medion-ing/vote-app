@@ -9,4 +9,6 @@ COPY . .
 
 EXPOSE 3000
 
+ENV VITE_API_URL=http://vote-backend:8000
+
 CMD ["npm", "run", "dev", "--", "--host"]
