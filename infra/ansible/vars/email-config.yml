@@ -1,6 +1,0 @@
-# vars/email-config.yml
-smtp_smarthost: 'smtp.gmail.com:587'
-smtp_from: 'medionnarcisse68@gmail.com'
-smtp_auth_username: 'medionnarcisse68@gmail.com'
-smtp_auth_password: 'fbfe vpjm rafo azwc'
-alert_email_to: 'narcissemedion@gmail.com'
