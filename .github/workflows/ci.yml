@@ -1,0 +1,102 @@
+name: CI/CD Pipeline Complète
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  # JOB 1 : TESTS BACKEND
+  test-backend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        cd backend
+        pip install -r requirements.txt
+        
+    - name: Test backend compilation
+      run: |
+        cd backend
+        python -m py_compile main.py
+        echo "✅ Backend code compiles successfully"
+
+  # JOB 2 : TESTS FRONTEND  
+  test-frontend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Install dependencies
+      run: |
+        cd frontend
+        npm install
+        
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm run build
+
+  # JOB 3 : BUILD DES IMAGES DOCKER
+  build-and-push:
+    needs: [test-backend, test-frontend]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+        
+    - name: Build and push backend image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./backend
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/vote-backend:latest
+        
+    - name: Build and push frontend image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./frontend
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/vote-frontend:latest
+
+  # JOB 4 : NOTIFICATION POUR DÉPLOIEMENT MANUEL
+  notify-deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Notify deployment ready
+      run: |
+        echo "🚀 IMAGES DOCKER PRÊTES !"
+        echo "Backend: ${{ secrets.DOCKERHUB_USERNAME }}/vote-backend:latest"
+        echo "Frontend: ${{ secrets.DOCKERHUB_USERNAME }}/vote-frontend:latest"
+        echo ""
+        echo "📋 POUR DÉPLOYER MANUELLEMENT :"
+        echo "cd infra/ansible"
+        echo "ansible-playbook -i inventory/hosts.ini playbooks/04-deploy-vote-app-complete.yml -e 'frontend_image=${{ secrets.DOCKERHUB_USERNAME }}/vote-frontend:latest backend_image=${{ secrets.DOCKERHUB_USERNAME }}/vote-backend:latest'"
