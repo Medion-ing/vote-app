@@ -1,0 +1,5 @@
+# ⚠️ CE FICHIER EST SECRET - NE PAS LE PARTAGER ⚠️
+
+proxmox_endpoint  = "https://192.168.1.42:8006/api2/json"
+proxmox_api_token = "terraform-prov@pam!terraform-token=7bf8551d-e898-41ea-9d05-d9ec1b838f13"
+ssh_public_key    = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDTuRwfhJHQbvhydIyQNAfC61S67A8c0hGu7oqnr1zAv859KPXl94dzx6vb0eLCqy7cMm1MXuxTzPO4aicLzh+/EmppLHn8SfM+Dpx5ws83fL4BB9emWOSc6V8hvVHYrE6apORauhmPf5L6jsqNOcNgwJqn8vdhSuAE/e668SkyWxv3JJR0EOcWanNIweU9xD/10XFuTvZ3jj+Wnq0sHejeymC9Eo8L55tTneVYte6kvAuowSSn6MguBIpWApZEOZ8rYjcQZ8R7SoY5I33NFoC0P3mRNK/PDza51JGPKccaTLS1ki+xjZaw4+ZKOD9W0FBvFjafPlJxEXd+EjYGo+7Kn1ekDEEYxuMdgdAbZnhusTcH6cw/WQkI4+lzZNH5620k9bM5LTsEZyj/S91Jqj9Zwu1VNUkQYqM8hsh86j1ZVcQgAO/Ob8q64EzmtI+2mmB15AyB5zug/N/Jfj67l/BqxjTlAjlPpmiBkydkORSgsBCI25VPBTtVROS7g+QRULUzUEPNPb4PrOgyc1weXcuSWJlTOE7SUTrKqU2VR1maYMHx90Rik9NCUHFgsgD51XG1/e1VuMmPR6jMhGSkT9WFqOOVJJfwSlAu3bJ/Pih9T7+1LEY6DoyPqpDVWo4x1KQgcx2U5YmrGmPFLIILwjgon+ziWz3kec7JEvBWOE4Rpw== terraform-proxmox"
