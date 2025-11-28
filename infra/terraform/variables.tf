@@ -1,17 +1,16 @@
 variable "proxmox_endpoint" {
   type        = string
-  description = "URL de l'API Proxmox"
-  sensitive   = true
+  description = "L'URL de mon Proxmox"
 }
 
 variable "proxmox_api_token" {
   type        = string
-  description = "Token API Proxmox"
-  sensitive   = true
+  description = "Le token pour se connecter à Proxmox"
+  sensitive   = true   # Cache la valeur dans les logs
 }
 
 variable "ssh_public_key" {
   type        = string
-  description = "Clé SSH publique"
-  sensitive   = true
+  description = "Ma clé SSH publique"
+  sensitive   = true   # Cache la valeur dans les logs
 }
