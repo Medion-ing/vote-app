@@ -23,6 +23,7 @@ secrets.yaml
 vault-password*
 *_vault.yml
 *_vault.yaml
+infra/ansible/inventory/hosts.ini
 
 # Private keys and local credential stores
 *.pem
